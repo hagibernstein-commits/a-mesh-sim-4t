@@ -27,7 +27,7 @@ interface TacticalViewportProps {
   show720Bubble: boolean;
   showFovCones: boolean;
   showGrid: boolean;
-  cameraPreset: 'OVERVIEW' | 'RIDGE_PROFILE' | 'UAV-1' | 'UAV-2';
+  cameraPreset: 'OVERVIEW' | 'RIDGE_PROFILE' | 'UAV-1' | 'UAV-2' | 'UAV-3';
   replayTrails?: Record<
     string,
     { true: [number, number, number][]; estimated: [number, number, number][] }
@@ -100,7 +100,7 @@ const TerrainMesh3D: React.FC<{
 };
 
 const CameraRig: React.FC<{
-  preset: 'OVERVIEW' | 'RIDGE_PROFILE' | 'UAV-1' | 'UAV-2';
+  preset: 'OVERVIEW' | 'RIDGE_PROFILE' | 'UAV-1' | 'UAV-2' | 'UAV-3';
   drones: DroneTelemetry[];
 }> = ({ preset, drones }) => {
   const controlsRef = useRef<any>(null);
@@ -120,7 +120,7 @@ const CameraRig: React.FC<{
 
   useFrame(() => {
     if (!controlsRef.current) return;
-    if (preset === 'UAV-1' || preset === 'UAV-2') {
+    if (preset === 'UAV-1' || preset === 'UAV-2' || preset === 'UAV-3') {
       const targetDrone = drones.find((d) => d.id === preset);
       if (targetDrone) {
         const [x, y, z] = targetDrone.true_position;

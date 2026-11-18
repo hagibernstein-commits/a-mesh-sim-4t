@@ -343,7 +343,7 @@ export const MissionPlannerPanel: React.FC<MissionPlannerPanelProps> = ({
   return (
     <div
       id="mission-planner-panel"
-      className="pointer-events-auto w-[420px] rounded-xl bg-slate-950/90 border border-cyan-500/40 shadow-2xl backdrop-blur-md p-3.5 text-xs text-slate-200 flex flex-col gap-2.5 max-h-[82vh] overflow-y-auto"
+      className="pointer-events-auto w-full md:w-[420px] max-w-full rounded-xl bg-slate-950/95 md:bg-slate-950/90 border border-cyan-500/40 shadow-2xl backdrop-blur-md p-3 md:p-3.5 text-xs text-slate-200 flex flex-col gap-2.5 max-h-[65dvh] md:max-h-[82vh] overflow-y-auto"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-800 pb-2">

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @layer base {
+  html,
   body {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     background-color: #060a12;
@@ -8,5 +9,16 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
+    width: 100%;
+    height: 100dvh;
   }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

@@ -21,7 +21,7 @@ export const App: React.FC = () => {
   const [showFovCones, setShowFovCones] = useState<boolean>(true);
   const [showGrid, setShowGrid] = useState<boolean>(true);
   const [cameraPreset, setCameraPreset] = useState<
-    'OVERVIEW' | 'RIDGE_PROFILE' | 'UAV-1' | 'UAV-2'
+    'OVERVIEW' | 'RIDGE_PROFILE' | 'UAV-1' | 'UAV-2' | 'UAV-3'
   >('OVERVIEW');
 
   const [draftPolygon, setDraftPolygon] = useState<[number, number][]>([
@@ -140,7 +140,7 @@ export const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-[#050911] select-none">
+    <div className="relative w-full h-[100dvh] overflow-hidden bg-[#050911] select-none">
       <TacticalViewport
         terrain={terrain}
         drones={activeSnapshot?.drones || []}

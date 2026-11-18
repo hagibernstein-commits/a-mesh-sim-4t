@@ -46,19 +46,19 @@ export const GimbalPiPViewport: React.FC<GimbalPiPViewportProps> = ({
       : 'from-[#081526] via-[#0c2238] to-[#050d17]';
 
   return (
-    <div className="pointer-events-auto flex flex-col gap-2.5 w-[350px]">
+    <div className="pointer-events-auto flex flex-col gap-2 md:gap-2.5 w-full md:w-[350px] max-w-full">
       {/* Gimbal PiP Card */}
       <div
         id="gimbal-pip-card"
-        className="rounded-xl bg-slate-950/90 border border-slate-800 shadow-2xl backdrop-blur-md p-3 flex flex-col gap-2 text-xs"
+        className="rounded-xl bg-slate-950/90 border border-slate-800 shadow-2xl backdrop-blur-md p-2.5 md:p-3 flex flex-col gap-2 text-xs"
       >
         {/* Top bar */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-1 flex-wrap">
           <div className="flex items-center gap-1.5 font-bold text-amber-400 text-[11px]">
             <Flame className="w-3.5 h-3.5" />
             <span>GIMBAL PIP:</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
             {drones.map((d) => (
               <button
                 key={d.id}
@@ -89,25 +89,25 @@ export const GimbalPiPViewport: React.FC<GimbalPiPViewportProps> = ({
 
         {/* Simulated Optical / Thermal Gimbal Reticle Viewport */}
         <div
-          className={`relative h-40 rounded-lg border border-rose-500/40 bg-gradient-to-b ${bgGradient} overflow-hidden flex items-center justify-center`}
+          className={`relative h-32 md:h-40 rounded-lg border border-rose-500/40 bg-gradient-to-b ${bgGradient} overflow-hidden flex items-center justify-center`}
         >
-          <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-slate-950/80 border border-slate-800 text-[10px] text-cyan-300 font-mono">
+          <div className="absolute top-1.5 left-1.5 md:top-2 md:left-2 px-1.5 py-0.5 rounded bg-slate-950/80 border border-slate-800 text-[9px] md:text-[10px] text-cyan-300 font-mono">
             PITCH {drone.gimbal_pitch_deg.toFixed(1)}° • YAW{' '}
             {drone.gimbal_yaw_deg >= 0 ? '+' : ''}
             {drone.gimbal_yaw_deg.toFixed(1)}°
           </div>
-          <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-slate-950/80 border border-amber-500/40 text-[10px] text-amber-300 font-mono">
+          <div className="absolute top-1.5 right-1.5 md:top-2 md:right-2 px-1.5 py-0.5 rounded bg-slate-950/80 border border-amber-500/40 text-[9px] md:text-[10px] text-amber-300 font-mono">
             {drone.zoom_level}x • {drone.sensor_mode} ({drone.fov_deg.toFixed(1)}°)
           </div>
 
           {/* Center LRF Crosshair */}
           <div className="relative flex items-center justify-center">
-            <div className="w-12 h-12 border border-rose-400/70 rounded-sm flex items-center justify-center">
-              <Crosshair className="w-5 h-5 text-rose-400/80" />
+            <div className="w-10 h-10 md:w-12 md:h-12 border border-rose-400/70 rounded-sm flex items-center justify-center">
+              <Crosshair className="w-4 h-4 md:w-5 md:h-5 text-rose-400/80" />
             </div>
             {lrf && (
-              <div className="ml-3 px-2 py-1 rounded bg-slate-950/90 border border-amber-500/50 text-[10px] font-mono">
-                <div className="text-amber-200 font-bold truncate max-w-[125px]">
+              <div className="ml-2 md:ml-3 px-2 py-1 rounded bg-slate-950/90 border border-amber-500/50 text-[10px] font-mono">
+                <div className="text-amber-200 font-bold truncate max-w-[115px] md:max-w-[125px]">
                   {lrf.target_label}
                 </div>
                 <div className="text-amber-400">
@@ -121,12 +121,12 @@ export const GimbalPiPViewport: React.FC<GimbalPiPViewportProps> = ({
           {lrf && (
             <div
               id="lrf-readout-bar"
-              className="absolute bottom-1.5 inset-x-2 px-2 py-1 rounded bg-slate-950/90 border border-rose-500/40 flex items-center justify-between text-[10px] font-mono"
+              className="absolute bottom-1.5 inset-x-1.5 md:inset-x-2 px-2 py-1 rounded bg-slate-950/90 border border-rose-500/40 flex items-center justify-between gap-1 text-[9px] md:text-[10px] font-mono"
             >
-              <span className="text-rose-400 font-bold">
+              <span className="text-rose-400 font-bold shrink-0">
                 • LRF: {lrf.slant_range_m.toFixed(1)} m
               </span>
-              <span id="lrf-target-wgs84" className="text-slate-200">
+              <span id="lrf-target-wgs84" className="text-slate-200 truncate">
                 {lrf.target_lat.toFixed(6)}°N, {lrf.target_lon.toFixed(6)}°E •{' '}
                 {lrf.target_alt_asl.toFixed(1)}m ASL
               </span>
@@ -135,7 +135,7 @@ export const GimbalPiPViewport: React.FC<GimbalPiPViewportProps> = ({
         </div>
 
         {/* Sensor & Thermal Palette Controls */}
-        <div className="flex items-center justify-between gap-1">
+        <div className="flex items-center justify-between gap-1 flex-wrap">
           <div className="flex items-center gap-1">
             {(['WIDE', 'ZOOM', 'THERMAL'] as const).map((m) => (
               <button
@@ -177,9 +177,9 @@ export const GimbalPiPViewport: React.FC<GimbalPiPViewportProps> = ({
         </div>
 
         {/* Zoom Selector */}
-        <div className="flex items-center justify-between text-[10px]">
+        <div className="flex items-center justify-between gap-1 text-[10px] flex-wrap">
           <span className="text-slate-400">ZOOM:</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
             {[1, 10, 40, 80, 160].map((z) => (
               <button
                 key={z}
