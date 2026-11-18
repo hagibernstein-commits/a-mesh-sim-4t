@@ -32,9 +32,9 @@ class SwarmSimulator:
 
     def __init__(
         self,
-        origin_lat: float = DEFAULT_ORIGIN_LAT,
-        origin_lon: float = DEFAULT_ORIGIN_LON,
-        origin_alt_asl: float = DEFAULT_ORIGIN_ALT_ASL,
+        origin_lat: float = 31.6935,
+        origin_lon: float = 34.9780,
+        origin_alt_asl: float = 335.0,
     ) -> None:
         self.origin_lat: float = float(origin_lat)
         self.origin_lon: float = float(origin_lon)
@@ -69,20 +69,23 @@ class SwarmSimulator:
         self.step(0.05)
 
     def _init_drones(self) -> None:
+        # UAV-1 patrols Giv'ot Eden outer security perimeter fence line and descends into Route 375 / Emek HaEla
         u1_wps = [
-            [-210.0, 72.0, -25.0],
-            [-95.0, 92.0, -20.0],
-            [45.0, 88.0, -15.0],
+            [-280.0, 74.0, -85.0],
+            [-95.0, 92.0, -82.0],
+            [45.0, 88.0, -20.0],
             [145.0, 78.0, -10.0],
-            [185.0, 82.0, 28.0],
-            [110.0, 80.0, 42.0],
-            [-120.0, 85.0, 20.0],
+            [175.0, 82.0, 32.0],
+            [-95.0, 90.0, 85.0],
+            [-280.0, 76.0, 82.0],
         ]
+        # UAV-2 loiters over Giv'ot Eden eastern ridge line to bridge A-Mesh LOS into Emek HaEla
         u2_wps = [
-            [-185.0, 110.0, 15.0],
-            [-125.0, 122.0, -25.0],
-            [-145.0, 118.0, 35.0],
+            [-165.0, 112.0, -25.0],
+            [-115.0, 124.0, 5.0],
+            [-145.0, 118.0, 38.0],
         ]
+        # UAV-3 provides overwatch along the Route 375 / Emek HaEla valley corridor and HV transmission towers
         u3_wps = [
             [75.0, 115.0, -55.0],
             [165.0, 118.0, -45.0],
@@ -92,10 +95,12 @@ class SwarmSimulator:
 
         self.drones = {
             "UAV-1": EvoMax4T("UAV-1", "ALPHA-1", "Scout", [-240.0, 68.0, -25.0], u1_wps),
-            "UAV-2": EvoMax4T("UAV-2", "BRAVO-2", "Relay", [-180.0, 105.0, 15.0], u2_wps),
+            "UAV-2": EvoMax4T("UAV-2", "BRAVO-2", "Relay", [-165.0, 108.0, 15.0], u2_wps),
             "UAV-3": EvoMax4T("UAV-3", "CHARLIE-3", "Overwatch", [75.0, 112.0, -45.0], u3_wps),
         }
-        self.event_log.append("[0.0s] [SYSTEM] A-Mesh 1.0 Swarm initialized — 3x Autel EVO Max 4T online.")
+        self.event_log.append(
+            "[0.0s] [SYSTEM] A-Mesh 1.0 Swarm online @ Giv'ot Eden / Emek HaEla (GCS-GIVOT-EDEN • 31.6935°N, 34.9780°E)."
+        )
 
     def set_geodetic_origin(
         self,

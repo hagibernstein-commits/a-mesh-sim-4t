@@ -63,9 +63,9 @@ export const MissionPlannerPanel: React.FC<MissionPlannerPanelProps> = ({
   onMissionUpdated,
   onOriginUpdated,
 }) => {
-  const [originLatStr, setOriginLatStr] = useState<string>('31.691500');
-  const [originLonStr, setOriginLonStr] = useState<string>('34.978500');
-  const [originAltStr, setOriginAltStr] = useState<string>('320.0');
+  const [originLatStr, setOriginLatStr] = useState<string>('31.693500');
+  const [originLonStr, setOriginLonStr] = useState<string>('34.978000');
+  const [originAltStr, setOriginAltStr] = useState<string>('335.0');
   const [originDirty, setOriginDirty] = useState<boolean>(false);
 
   const [sensorMode, setSensorMode] = useState<'THERMAL' | 'WIDE'>('THERMAL');
@@ -73,16 +73,16 @@ export const MissionPlannerPanel: React.FC<MissionPlannerPanelProps> = ({
   const [sidelapPct, setSidelapPct] = useState<number>(70);
   const [sweepAngleDeg, setSweepAngleDeg] = useState<number>(0);
   const [statusMsg, setStatusMsg] = useState<string>(
-    'Ready — configure WGS84 Site Origin or generate SAR sweep grid.'
+    'Ready — Giv\'ot Eden / Emek HaEla datum active (31.6935°N, 34.9780°E, 335m ASL).'
   );
   const [busy, setBusy] = useState<boolean>(false);
 
   // Sync from backend geodeticOrigin when not actively editing
   useEffect(() => {
     if (!geodeticOrigin || originDirty) return;
-    const lat = geodeticOrigin.lat ?? geodeticOrigin.origin_lat ?? 31.6915;
-    const lon = geodeticOrigin.lon ?? geodeticOrigin.origin_lon ?? 34.9785;
-    const alt = geodeticOrigin.alt_asl ?? geodeticOrigin.origin_alt_asl ?? 320.0;
+    const lat = geodeticOrigin.lat ?? geodeticOrigin.origin_lat ?? 31.6935;
+    const lon = geodeticOrigin.lon ?? geodeticOrigin.origin_lon ?? 34.9780;
+    const alt = geodeticOrigin.alt_asl ?? geodeticOrigin.origin_alt_asl ?? 335.0;
     setOriginLatStr(lat.toFixed(6));
     setOriginLonStr(lon.toFixed(6));
     setOriginAltStr(alt.toFixed(1));
@@ -93,9 +93,9 @@ export const MissionPlannerPanel: React.FC<MissionPlannerPanelProps> = ({
     const lon = Number.parseFloat(originLonStr);
     const alt = Number.parseFloat(originAltStr);
     return {
-      lat: Number.isFinite(lat) ? Math.max(-90, Math.min(90, lat)) : 31.6915,
-      lon: Number.isFinite(lon) ? Math.max(-180, Math.min(180, lon)) : 34.9785,
-      alt_asl: Number.isFinite(alt) ? alt : 320.0,
+      lat: Number.isFinite(lat) ? Math.max(-90, Math.min(90, lat)) : 31.6935,
+      lon: Number.isFinite(lon) ? Math.max(-180, Math.min(180, lon)) : 34.9780,
+      alt_asl: Number.isFinite(alt) ? alt : 335.0,
     };
   }, [originLatStr, originLonStr, originAltStr]);
 
@@ -107,11 +107,11 @@ export const MissionPlannerPanel: React.FC<MissionPlannerPanelProps> = ({
     return VALLEY_PRESET;
   }, [draftPolygon, sarMission]);
 
-  // Live Origin Corner Readout: exact WGS84 coordinates of GCS and currently drawn polygon's center
+  // Live Origin Corner Readout: exact WGS84 coordinates of GCS-GIVOT-EDEN and currently drawn polygon's center
   const cornerReadout = useMemo(() => {
-    const gcsX = gcsPosition?.[0] ?? -340.0;
-    const gcsY = gcsPosition?.[1] ?? 25.0;
-    const gcsZ = gcsPosition?.[2] ?? 40.0;
+    const gcsX = gcsPosition?.[0] ?? -215.0;
+    const gcsY = gcsPosition?.[1] ?? 42.0;
+    const gcsZ = gcsPosition?.[2] ?? 12.0;
     const gcsWgs = localToWgs84Frontend(gcsX, gcsZ, parsedOrigin.lat, parsedOrigin.lon);
     const gcsAltAsl = parsedOrigin.alt_asl + gcsY;
 
@@ -150,7 +150,7 @@ export const MissionPlannerPanel: React.FC<MissionPlannerPanelProps> = ({
     const payload = {
       lat,
       lon,
-      alt_asl: Number.isFinite(alt_asl) ? alt_asl : 320.0,
+      alt_asl: Number.isFinite(alt_asl) ? alt_asl : 335.0,
     };
     const res = await fetch('/api/mission/origin', {
       method: 'POST',
@@ -311,7 +311,7 @@ export const MissionPlannerPanel: React.FC<MissionPlannerPanelProps> = ({
           setOriginDirty(false);
           setOriginLatStr(Number(data.geodetic_origin.lat).toFixed(6));
           setOriginLonStr(Number(data.geodetic_origin.lon).toFixed(6));
-          setOriginAltStr(Number(data.geodetic_origin.alt_asl ?? 320).toFixed(1));
+          setOriginAltStr(Number(data.geodetic_origin.alt_asl ?? 335).toFixed(1));
           if (onOriginUpdated) {
             onOriginUpdated(data.geodetic_origin);
           }

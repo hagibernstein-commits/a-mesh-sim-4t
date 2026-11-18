@@ -90,15 +90,26 @@ def test_mission_planner_relay_retask_state():
     assert retask["unvisited_count"] > 0
 
 
+def test_default_givot_eden_geodetic_datum():
+    sim = SwarmSimulator()
+    assert abs(DEFAULT_ORIGIN_LAT - 31.6935) < 1e-6
+    assert abs(DEFAULT_ORIGIN_LON - 34.9780) < 1e-6
+    assert abs(DEFAULT_ORIGIN_ALT_ASL - 335.0) < 1e-2
+    assert abs(sim.origin_lat - 31.6935) < 1e-6
+    assert abs(sim.origin_lon - 34.9780) < 1e-6
+    assert abs(sim.origin_alt_asl - 335.0) < 1e-2
+    assert sim.terrain.gcs_id == "GCS-GIVOT-EDEN"
+
+
 def test_wgs84_meridian_and_parallel_scaling_and_round_trip():
-    set_active_origin(31.6915, 34.9785, 320.0)
+    set_active_origin(31.6935, 34.9780, 335.0)
     x, z = 140.0, -55.0
     lat, lon = local_to_wgs84(x, z)
 
     expected_dlat = -z / METERS_PER_DEG_LAT
-    expected_dlon = x / (METERS_PER_DEG_LAT * math.cos(math.radians(31.6915)))
-    assert abs((lat - 31.6915) - expected_dlat) < 1e-9
-    assert abs((lon - 34.9785) - expected_dlon) < 1e-9
+    expected_dlon = x / (METERS_PER_DEG_LAT * math.cos(math.radians(31.6935)))
+    assert abs((lat - 31.6935) - expected_dlat) < 1e-9
+    assert abs((lon - 34.9780) - expected_dlon) < 1e-9
 
     rx, rz = wgs84_to_local(lat, lon)
     assert abs(rx - x) < 1e-4

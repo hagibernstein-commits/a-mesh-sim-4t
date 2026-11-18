@@ -237,13 +237,18 @@ export interface TelemetrySnapshot {
 }
 
 export interface TerrainHeightmap {
+  sector_name?: string;
   size_m: number;
   resolution: number;
   origin_lat: number;
   origin_lon: number;
   origin_alt_asl: number;
   geodetic_origin: GeodeticOrigin;
+  gcs_id?: string;
+  gcs_label?: string;
   gcs_position: [number, number, number];
+  perimeter_fence_xz?: [number, number][];
+  valley_road_xz?: [number, number][];
   heights: number[][];
   buildings: {
     id: string;

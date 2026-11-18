@@ -8,9 +8,9 @@ import numpy as np
 from .specs import EVO_MAX_4T_SPECS
 
 METERS_PER_DEG_LAT: float = 111320.0
-DEFAULT_ORIGIN_LAT: float = 31.6915
-DEFAULT_ORIGIN_LON: float = 34.9785
-DEFAULT_ORIGIN_ALT_ASL: float = 320.0
+DEFAULT_ORIGIN_LAT: float = 31.6935
+DEFAULT_ORIGIN_LON: float = 34.9780
+DEFAULT_ORIGIN_ALT_ASL: float = 335.0
 
 _ACTIVE_ORIGIN: Dict[str, float] = {
     "lat": DEFAULT_ORIGIN_LAT,
@@ -246,7 +246,7 @@ class CliffOutcrop:
 
 
 class TacticalTerrain:
-    """Procedural 3D terrain with Diablo Ridge, urban structures, HV powerlines, and WGS84 datum."""
+    """Procedural 3D terrain of Giv'ot Eden & Emek HaEla (Route 375), Israel with limestone ridges, HV powerlines, and WGS84 datum."""
 
     def __init__(
         self,
@@ -264,10 +264,32 @@ class TacticalTerrain:
         self.origin_alt_asl = float(origin_alt_asl)
         set_active_origin(self.origin_lat, self.origin_lon, self.origin_alt_asl)
 
-        # Ground Control Station (GCS-ALPHA) in West Valley
-        gcs_x, gcs_z = -340.0, 40.0
+        # Ground Control Station (GCS-GIVOT-EDEN) on the central residential hilltop of Giv'ot Eden
+        self.gcs_id: str = "GCS-GIVOT-EDEN"
+        self.gcs_label: str = "GCS-GIVOT-EDEN (Giv'ot Eden Hilltop Command)"
+        gcs_x, gcs_z = -215.0, 12.0
         gcs_ground = self.get_elevation(gcs_x, gcs_z)
         self.gcs_position = np.array([gcs_x, gcs_ground + 8.0, gcs_z], dtype=float)
+
+        # Outer security perimeter fence line circling Giv'ot Eden residential hilltop
+        self.perimeter_fence_xz: List[List[float]] = [
+            [-295.0, -95.0],
+            [-85.0, -95.0],
+            [-62.0, -35.0],
+            [-62.0, 45.0],
+            [-85.0, 95.0],
+            [-295.0, 95.0],
+        ]
+
+        # Valley road corridor centerline (Route 375 / Emek HaEla)
+        self.valley_road_xz: List[List[float]] = [
+            [118.0, -460.0],
+            [128.0, -240.0],
+            [138.0, -80.0],
+            [148.0, 40.0],
+            [162.0, 220.0],
+            [176.0, 460.0],
+        ]
 
         self.buildings: List[Building] = self._generate_buildings()
         self.thermal_entities: List[ThermalEntity] = self._generate_thermal_entities()
@@ -301,23 +323,30 @@ class TacticalTerrain:
         return self.wgs84_to_local(lat, lon)
 
     def get_elevation(self, x: float, z: float) -> float:
-        """Compute procedural terrain elevation (m above local datum) at (x, z)."""
-        # Diablo Ridge runs roughly N-S centered near x = -40m with peak ~136m
-        ridge_center_x = -40.0 + 18.0 * math.sin(z * 0.006)
+        """Compute local 3D relief for Giv'ot Eden hillcrests, limestone ridge, and Emek HaEla valley floor."""
+        # HaEla Limestone Escarpment / Ridge running N-S near x = -38m creating A-Mesh LOS shadow zones
+        ridge_center_x = -38.0 + 16.0 * math.sin(z * 0.006)
         dx_ridge = x - ridge_center_x
-        main_ridge = 122.0 * math.exp(-((dx_ridge / 78.0) ** 2)) * math.exp(-((z / 420.0) ** 2))
+        main_ridge = 118.0 * math.exp(-((dx_ridge / 74.0) ** 2)) * math.exp(-((z / 430.0) ** 2))
 
-        # Secondary saddle / rocky crest modulation along Diablo Ridge
-        crest_mod = 14.0 * math.exp(-((dx_ridge / 42.0) ** 2)) * (0.55 + 0.45 * math.cos(z * 0.018))
+        # Secondary karst limestone crest modulation along the escarpment
+        crest_mod = 14.0 * math.exp(-((dx_ridge / 40.0) ** 2)) * (0.55 + 0.45 * math.cos(z * 0.018))
 
-        # Western foothills near GCS
-        west_hills = 16.0 * math.exp(-(((x + 310.0) / 140.0) ** 2 + ((z - 30.0) / 180.0) ** 2))
+        # Giv'ot Eden residential hilltop plateau (x in [-320, -40], ~340m–375m ASL equivalent relief)
+        givot_eden_dome = 22.0 * math.exp(-(((x + 195.0) / 145.0) ** 2 + ((z - 10.0) / 175.0) ** 2))
 
-        # Eastern valley floor (~15-24m) with gentle rolling undulations
-        east_undulation = 4.5 * math.sin(x * 0.015) * math.cos(z * 0.015) + 16.0
+        # Lower Emek HaEla / Route 375 valley floor (east of ridge, x > 45m) with gentle rolling terraces
+        valley_terrace = 4.0 * math.sin(x * 0.014) * math.cos(z * 0.014) + 14.5
 
-        elev = east_undulation + main_ridge + crest_mod + west_hills
+        elev = valley_terrace + main_ridge + crest_mod + givot_eden_dome
         return max(8.0, float(elev))
+
+    def get_elevation_asl(self, x: float, z: float) -> float:
+        """Return real-world ASL elevation (m): ~340m–375m on Giv'ot Eden hillcrests, ~265m–295m in Emek HaEla valley."""
+        # Smooth transition from Giv'ot Eden hilltop (~350-375m ASL) down into Emek HaEla valley (~265-295m ASL)
+        valley_drop = 62.0 / (1.0 + math.exp(-(x - 28.0) / 34.0))
+        local_h = self.get_elevation(x, z)
+        return round(self.origin_alt_asl + (local_h * 0.32) - valley_drop + 12.0, 2)
 
     def sample_terrain(self, x: float, z: float) -> float:
         """Alias for get_elevation used by MissionPlanner."""
@@ -325,18 +354,18 @@ class TacticalTerrain:
 
     def _generate_buildings(self) -> List[Building]:
         specs = [
-            ("BLD-01", "Forward Ops Depot", -270.0, 20.0, 24.0, 18.0, 14.0),
-            ("BLD-02", "Comms Bunker West", -235.0, -35.0, 18.0, 18.0, 12.0),
-            ("BLD-03", "Valley Warehouse A", 85.0, -55.0, 26.0, 20.0, 16.0),
-            ("BLD-04", "Valley Warehouse B", 125.0, -52.0, 22.0, 18.0, 18.0),
-            ("BLD-05", "East Grid Substation", 145.0, -15.0, 28.0, 24.0, 21.0),
-            ("BLD-06", "Cooling Tower North", 185.0, -45.0, 20.0, 20.0, 26.0),
-            ("BLD-07", "Control Annex", 110.0, 22.0, 24.0, 18.0, 15.0),
-            ("BLD-08", "Logistics Hangar", 165.0, 35.0, 32.0, 22.0, 19.0),
-            ("BLD-09", "Sensor Calibration Lab", 210.0, 5.0, 20.0, 18.0, 22.0),
-            ("BLD-10", "East Watchtower", 240.0, -25.0, 14.0, 14.0, 30.0),
-            ("BLD-11", "South Relay Shelter", 95.0, 62.0, 18.0, 16.0, 13.0),
-            ("BLD-12", "Fuel Storage Array", 205.0, 55.0, 24.0, 20.0, 15.0),
+            ("BLD-01", "GCS-GIVOT-EDEN Hilltop Command Center", -215.0, 12.0, 24.0, 18.0, 14.0),
+            ("BLD-02", "Giv'ot Eden North Perimeter Gatehouse", -185.0, -72.0, 18.0, 18.0, 12.0),
+            ("BLD-03", "Route 375 Agricultural Warehouse A", 85.0, -55.0, 26.0, 20.0, 16.0),
+            ("BLD-04", "Route 375 Agricultural Warehouse B", 125.0, -52.0, 22.0, 18.0, 18.0),
+            ("BLD-05", "Emek HaEla Regional Grid Substation", 145.0, -15.0, 28.0, 24.0, 21.0),
+            ("BLD-06", "Netiv HaLamed-Heh Water Pumping Station", 185.0, -45.0, 20.0, 20.0, 26.0),
+            ("BLD-07", "Emek HaEla Valley Comms Annex", 110.0, 22.0, 24.0, 18.0, 15.0),
+            ("BLD-08", "Elah Valley Field Logistics Hangar", 165.0, 35.0, 32.0, 22.0, 19.0),
+            ("BLD-09", "HaEla SatCom Calibration Facility", 210.0, 5.0, 20.0, 18.0, 22.0),
+            ("BLD-10", "Route 375 East Observation Watchtower", 240.0, -25.0, 14.0, 14.0, 30.0),
+            ("BLD-11", "Tel Sokho South Relay Shelter", 95.0, 62.0, 18.0, 16.0, 13.0),
+            ("BLD-12", "Emek HaEla Emergency Fuel Depot", 205.0, 55.0, 24.0, 20.0, 15.0),
         ]
         buildings: List[Building] = []
         for bid, name, x, z, w, d, h in specs:
@@ -348,7 +377,7 @@ class TacticalTerrain:
         entities = [
             ThermalEntity(
                 id="THM-01",
-                label="Armored Convoy Lead (APC)",
+                label="Route 375 Armored Security Convoy (APC)",
                 category="VEHICLE_ARMOR",
                 base_x=115.0,
                 base_z=-20.0,
@@ -362,7 +391,7 @@ class TacticalTerrain:
             ),
             ThermalEntity(
                 id="THM-02",
-                label="Tactical Utility Truck",
+                label="Route 375 Tactical Patrol Pickup",
                 category="VEHICLE_SUPPORT",
                 base_x=168.0,
                 base_z=18.0,
@@ -376,7 +405,7 @@ class TacticalTerrain:
             ),
             ThermalEntity(
                 id="THM-03",
-                label="Mobile Diesel Generator Hut",
+                label="Emek HaEla Substation Diesel Generator",
                 category="INFRASTRUCTURE_HEAT",
                 base_x=145.0,
                 base_z=-15.0,
@@ -390,7 +419,7 @@ class TacticalTerrain:
             ),
             ThermalEntity(
                 id="THM-04",
-                label="Recon Foot Patrol (Personnel)",
+                label="Emek HaEla Perimeter Foot Patrol (SAR)",
                 category="PERSONNEL_SAR",
                 base_x=135.0,
                 base_z=38.0,
@@ -409,10 +438,10 @@ class TacticalTerrain:
 
     def _generate_pylons(self) -> List[TransmissionPylon]:
         coords = [
-            ("PYLON-1", "HV Tower North-West", 75.0, -95.0, 42.0),
-            ("PYLON-2", "HV Tower Center-West", 95.0, 5.0, 44.0),
-            ("PYLON-3", "HV Tower Center-East", 195.0, -5.0, 44.0),
-            ("PYLON-4", "HV Tower South-East", 215.0, 95.0, 42.0),
+            ("PYLON-1", "Emek HaEla HV Tower North-West", 75.0, -95.0, 42.0),
+            ("PYLON-2", "Route 375 HV Tower Center-West", 95.0, 5.0, 44.0),
+            ("PYLON-3", "Route 375 HV Tower Center-East", 195.0, -5.0, 44.0),
+            ("PYLON-4", "Emek HaEla HV Tower South-East", 215.0, 95.0, 42.0),
         ]
         pylons: List[TransmissionPylon] = []
         for pid, name, x, z, h in coords:
@@ -426,44 +455,44 @@ class TacticalTerrain:
         return [
             PowerLineSpan(
                 id="WIRE-SPAN-1",
-                name="115kV Valley Cross-Tie HV Line (15mm ACSR)",
+                name="161kV Emek HaEla Cross-Valley HV Line (15mm ACSR)",
                 pylon_a_id=p1.id,
                 pylon_b_id=p2.id,
                 start_pos=[p1.x, p1.base_elevation + p1.height - 4.0, p1.z],
                 end_pos=[p2.x, p2.base_elevation + p2.height - 4.0, p2.z],
                 sag_m=6.5,
                 wire_diameter_mm=15.0,
-                voltage_kv=115,
+                voltage_kv=161,
             ),
             PowerLineSpan(
                 id="WIRE-SPAN-2",
-                name="230kV Substation Feeder HV Line (15mm ACSR)",
+                name="400kV Route 375 Substation Feeder HV Line (15mm ACSR)",
                 pylon_a_id=p2.id,
                 pylon_b_id=p3.id,
                 start_pos=[p2.x, p2.base_elevation + p2.height - 3.5, p2.z],
                 end_pos=[p3.x, p3.base_elevation + p3.height - 3.5, p3.z],
                 sag_m=7.0,
                 wire_diameter_mm=15.0,
-                voltage_kv=230,
+                voltage_kv=400,
             ),
             PowerLineSpan(
                 id="WIRE-SPAN-3",
-                name="230kV East Corridor HV Line (15mm ACSR)",
+                name="400kV Emek HaEla East Corridor HV Line (15mm ACSR)",
                 pylon_a_id=p3.id,
                 pylon_b_id=p4.id,
                 start_pos=[p3.x, p3.base_elevation + p3.height - 4.0, p3.z],
                 end_pos=[p4.x, p4.base_elevation + p4.height - 4.0, p4.z],
                 sag_m=6.5,
                 wire_diameter_mm=15.0,
-                voltage_kv=230,
+                voltage_kv=400,
             ),
         ]
 
     def _generate_cliff_outcrops(self) -> List[CliffOutcrop]:
         specs = [
-            ("OUTCROP-1", "Diablo North Spire", -35.0, -75.0, 16.0, 26.0),
-            ("OUTCROP-2", "Razorback Crag", -22.0, 15.0, 15.0, 24.0),
-            ("OUTCROP-3", "East Valley Monolith", 62.0, -18.0, 13.0, 28.0),
+            ("OUTCROP-1", "Giv'ot Eden North Limestone Escarpment", -35.0, -75.0, 16.0, 26.0),
+            ("OUTCROP-2", "HaEla Central Limestone Ridge Crest", -22.0, 15.0, 15.0, 24.0),
+            ("OUTCROP-3", "Tel Sokho Karst Bluff", 62.0, -18.0, 13.0, 28.0),
         ]
         outcrops: List[CliffOutcrop] = []
         for oid, name, x, z, r, h in specs:
@@ -472,7 +501,7 @@ class TacticalTerrain:
         return outcrops
 
     def check_los(self, p1: np.ndarray, p2: np.ndarray, num_samples: int = 48) -> Tuple[bool, float, List[float]]:
-        """Check Line-of-Sight between two 3D points across Diablo Ridge and urban structures."""
+        """Check Line-of-Sight between two 3D points across the Giv'ot Eden / Emek HaEla limestone ridges."""
         max_obstruction_m = 0.0
         worst_point = [float((p1[0] + p2[0]) * 0.5), float((p1[1] + p2[1]) * 0.5), float((p1[2] + p2[2]) * 0.5)]
         for i in range(1, num_samples):
@@ -734,6 +763,7 @@ class TacticalTerrain:
 
         gcs_lat, gcs_lon = self.local_to_wgs84(float(self.gcs_position[0]), float(self.gcs_position[2]))
         return {
+            "sector_name": "Giv'ot Eden / Emek HaEla (Route 375), Israel",
             "size_m": self.size_m,
             "resolution": self.resolution,
             "origin_lat": round(self.origin_lat, 7),
@@ -744,12 +774,16 @@ class TacticalTerrain:
                 "lon": round(self.origin_lon, 7),
                 "alt_asl": round(self.origin_alt_asl, 2),
             },
+            "gcs_id": self.gcs_id,
+            "gcs_label": self.gcs_label,
             "gcs_position": [round(float(v), 2) for v in self.gcs_position],
             "gcs_wgs84": {
                 "lat": round(gcs_lat, 7),
                 "lon": round(gcs_lon, 7),
                 "alt_asl": round(self.origin_alt_asl + float(self.gcs_position[1]), 2),
             },
+            "perimeter_fence_xz": self.perimeter_fence_xz,
+            "valley_road_xz": self.valley_road_xz,
             "heights": grid,
             "buildings": [b.to_dict() for b in self.buildings],
             "thermal_entities": [e.to_dict(self) for e in self.thermal_entities],

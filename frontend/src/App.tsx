@@ -171,7 +171,7 @@ export const App: React.FC = () => {
         }
         gcsPosition={
           activeSnapshot?.gcs_position ||
-          terrain?.gcs_position || [-340.0, 24.0, 40.0]
+          terrain?.gcs_position || [-215.0, 42.0, 12.0]
         }
         drones={activeSnapshot?.drones || []}
         links={activeSnapshot?.links || []}

@@ -191,7 +191,7 @@ export const TacticalViewport: React.FC<TacticalViewportProps> = ({
           />
         )}
 
-        {/* GCS-ALPHA Station */}
+        {/* GCS-GIVOT-EDEN Hilltop Command Station */}
         {terrain && (
           <group position={terrain.gcs_position}>
             <mesh position={[0, 4, 0]}>
@@ -201,7 +201,46 @@ export const TacticalViewport: React.FC<TacticalViewportProps> = ({
           </group>
         )}
 
-        {/* Urban Buildings */}
+        {/* Giv'ot Eden Outer Security Perimeter Fence Line */}
+        {terrain?.perimeter_fence_xz && terrain.perimeter_fence_xz.length >= 3 && (
+          <Line
+            points={[
+              ...terrain.perimeter_fence_xz.map(([x, z]) => [x, 34, z] as [number, number, number]),
+              [terrain.perimeter_fence_xz[0][0], 34, terrain.perimeter_fence_xz[0][1]],
+            ]}
+            color="#10b981"
+            lineWidth={1.5}
+            dashed
+            dashSize={6}
+            gapSize={4}
+          />
+        )}
+
+        {/* Route 375 / Emek HaEla Valley Road Corridor */}
+        {terrain?.valley_road_xz && terrain.valley_road_xz.length >= 2 && (
+          <Line
+            points={terrain.valley_road_xz.map(([x, z]) => [x, 16.5, z] as [number, number, number])}
+            color="#94a3b8"
+            lineWidth={3.5}
+          />
+        )}
+
+        {/* HaEla Limestone Ridge Cliff Outcrops */}
+        {terrain?.cliff_outcrops?.map((c) => (
+          <mesh
+            key={c.id}
+            position={[c.x, c.base_elevation + c.height * 0.45, c.z]}
+          >
+            <coneGeometry args={[c.radius, c.height, 7]} />
+            <meshStandardMaterial
+              color="#334155"
+              roughness={0.92}
+              metalness={0.08}
+            />
+          </mesh>
+        ))}
+
+        {/* Giv'ot Eden & Emek HaEla Structures */}
         {terrain?.buildings.map((b) => (
           <mesh
             key={b.id}

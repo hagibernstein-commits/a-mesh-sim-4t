@@ -32,7 +32,7 @@ def resolve_static_dir() -> Optional[Path]:
 class GeodeticOriginRequest(BaseModel):
     lat: float = Field(..., ge=-90.0, le=90.0, description="WGS84 Latitude in decimal degrees (-90 to 90)")
     lon: float = Field(..., ge=-180.0, le=180.0, description="WGS84 Longitude in decimal degrees (-180 to 180)")
-    alt_asl: float = Field(default=320.0, description="Base site elevation ASL in meters")
+    alt_asl: float = Field(default=335.0, description="Base site elevation ASL in meters")
 
 
 class ControlRequest(BaseModel):
