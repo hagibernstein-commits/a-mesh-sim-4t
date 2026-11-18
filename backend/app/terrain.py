@@ -1,0 +1,759 @@
+"""3D Tactical Terrain, WGS84 Geodetic Projection, Thermal Entities, HV Power Lines & 720° Obstacle Raycasting."""
+
+from __future__ import annotations
+from dataclasses import dataclass
+import math
+from typing import Dict, List, Any, Optional, Tuple
+import numpy as np
+from .specs import EVO_MAX_4T_SPECS
+
+METERS_PER_DEG_LAT: float = 111320.0
+DEFAULT_ORIGIN_LAT: float = 31.6915
+DEFAULT_ORIGIN_LON: float = 34.9785
+DEFAULT_ORIGIN_ALT_ASL: float = 320.0
+
+_ACTIVE_ORIGIN: Dict[str, float] = {
+    "lat": DEFAULT_ORIGIN_LAT,
+    "lon": DEFAULT_ORIGIN_LON,
+    "alt_asl": DEFAULT_ORIGIN_ALT_ASL,
+}
+
+
+def get_active_origin() -> Dict[str, float]:
+    """Return a copy of the active simulator WGS84 geodetic origin."""
+    return {
+        "lat": float(_ACTIVE_ORIGIN["lat"]),
+        "lon": float(_ACTIVE_ORIGIN["lon"]),
+        "alt_asl": float(_ACTIVE_ORIGIN["alt_asl"]),
+    }
+
+
+def set_active_origin(
+    lat: float,
+    lon: float,
+    alt_asl: Optional[float] = None,
+) -> Dict[str, float]:
+    """Update the active simulator WGS84 geodetic origin with validation."""
+    lat_f = float(lat)
+    lon_f = float(lon)
+    if not (-90.0 <= lat_f <= 90.0):
+        raise ValueError(f"Latitude must be between -90 and 90 degrees (got {lat_f})")
+    if not (-180.0 <= lon_f <= 180.0):
+        raise ValueError(f"Longitude must be between -180 and 180 degrees (got {lon_f})")
+    _ACTIVE_ORIGIN["lat"] = lat_f
+    _ACTIVE_ORIGIN["lon"] = lon_f
+    if alt_asl is not None:
+        _ACTIVE_ORIGIN["alt_asl"] = float(alt_asl)
+    return get_active_origin()
+
+
+def local_to_wgs84(
+    x: float,
+    z: float,
+    origin_lat: Optional[float] = None,
+    origin_lon: Optional[float] = None,
+) -> Tuple[float, float]:
+    """Convert local tactical meters (x East, z South) to WGS84 (lat, lon) degrees.
+
+    Uses meridian/parallel scaling:
+      d_lat = -z / 111,320.0
+      d_lon =  x / (111,320.0 * cos(radians(origin_lat)))
+    """
+    o_lat = float(_ACTIVE_ORIGIN["lat"] if origin_lat is None else origin_lat)
+    o_lon = float(_ACTIVE_ORIGIN["lon"] if origin_lon is None else origin_lon)
+    cos_lat = max(math.cos(math.radians(o_lat)), 1e-6)
+    d_lat = -float(z) / METERS_PER_DEG_LAT
+    d_lon = float(x) / (METERS_PER_DEG_LAT * cos_lat)
+    return (o_lat + d_lat, o_lon + d_lon)
+
+
+def wgs84_to_local(
+    lat: float,
+    lon: float,
+    origin_lat: Optional[float] = None,
+    origin_lon: Optional[float] = None,
+) -> Tuple[float, float]:
+    """Convert WGS84 (lat, lon) degrees to local tactical meters (x East, z South)."""
+    o_lat = float(_ACTIVE_ORIGIN["lat"] if origin_lat is None else origin_lat)
+    o_lon = float(_ACTIVE_ORIGIN["lon"] if origin_lon is None else origin_lon)
+    cos_lat = max(math.cos(math.radians(o_lat)), 1e-6)
+    z = -(float(lat) - o_lat) * METERS_PER_DEG_LAT
+    x = (float(lon) - o_lon) * (METERS_PER_DEG_LAT * cos_lat)
+    return (x, z)
+
+
+# Aliases for backward compatibility
+local_to_gps = local_to_wgs84
+gps_to_local = wgs84_to_local
+
+
+@dataclass
+class Building:
+    id: str
+    name: str
+    x: float
+    z: float
+    width: float
+    depth: float
+    height: float
+    base_elevation: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "x": round(self.x, 2),
+            "z": round(self.z, 2),
+            "width": round(self.width, 2),
+            "depth": round(self.depth, 2),
+            "height": round(self.height, 2),
+            "base_elevation": round(self.base_elevation, 2),
+        }
+
+
+@dataclass
+class ThermalEntity:
+    id: str
+    label: str
+    category: str
+    base_x: float
+    base_z: float
+    temp_c: float
+    radius_m: float
+    height_m: float
+    patrol_rx: float = 0.0
+    patrol_rz: float = 0.0
+    patrol_omega: float = 0.0
+    phase: float = 0.0
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+
+    def update(self, sim_time: float, terrain: "TacticalTerrain") -> None:
+        if self.patrol_omega != 0.0:
+            ang = sim_time * self.patrol_omega + self.phase
+            self.x = self.base_x + math.cos(ang) * self.patrol_rx
+            self.z = self.base_z + math.sin(ang) * self.patrol_rz
+        else:
+            self.x = self.base_x
+            self.z = self.base_z
+        self.y = terrain.get_elevation(self.x, self.z)
+
+    def to_dict(self, terrain: Optional["TacticalTerrain"] = None) -> Dict[str, Any]:
+        if terrain is not None:
+            lat, lon = terrain.local_to_wgs84(self.x, self.z)
+            alt_asl = terrain.origin_alt_asl + self.y
+        else:
+            lat, lon = local_to_wgs84(self.x, self.z)
+            alt_asl = _ACTIVE_ORIGIN["alt_asl"] + self.y
+        return {
+            "id": self.id,
+            "label": self.label,
+            "category": self.category,
+            "position": [round(self.x, 2), round(self.y, 2), round(self.z, 2)],
+            "temp_c": round(self.temp_c, 1),
+            "radius_m": round(self.radius_m, 2),
+            "height_m": round(self.height_m, 2),
+            "lat": round(lat, 6),
+            "lon": round(lon, 6),
+            "alt_asl": round(alt_asl, 2),
+        }
+
+
+@dataclass
+class TransmissionPylon:
+    id: str
+    name: str
+    x: float
+    z: float
+    base_elevation: float
+    height: float
+    crossarm_width: float = 14.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "x": round(self.x, 2),
+            "z": round(self.z, 2),
+            "base_elevation": round(self.base_elevation, 2),
+            "height": round(self.height, 2),
+            "crossarm_width": round(self.crossarm_width, 2),
+        }
+
+
+@dataclass
+class PowerLineSpan:
+    id: str
+    name: str
+    pylon_a_id: str
+    pylon_b_id: str
+    start_pos: List[float]
+    end_pos: List[float]
+    sag_m: float
+    wire_diameter_mm: float = 15.0
+    voltage_kv: int = 230
+    conductors: int = 3
+
+    def sample_points(self, num_samples: int = 24) -> List[List[float]]:
+        pts: List[List[float]] = []
+        p0 = np.array(self.start_pos, dtype=float)
+        p1 = np.array(self.end_pos, dtype=float)
+        for i in range(num_samples + 1):
+            t = i / float(num_samples)
+            pos = (1.0 - t) * p0 + t * p1
+            sag_offset = 4.0 * self.sag_m * t * (1.0 - t)
+            pos[1] -= sag_offset
+            pts.append([round(float(pos[0]), 2), round(float(pos[1]), 2), round(float(pos[2]), 2)])
+        return pts
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "pylon_a_id": self.pylon_a_id,
+            "pylon_b_id": self.pylon_b_id,
+            "start_pos": [round(v, 2) for v in self.start_pos],
+            "end_pos": [round(v, 2) for v in self.end_pos],
+            "sag_m": round(self.sag_m, 2),
+            "wire_diameter_mm": round(self.wire_diameter_mm, 1),
+            "voltage_kv": self.voltage_kv,
+            "conductors": self.conductors,
+            "points": self.sample_points(24),
+        }
+
+
+@dataclass
+class CliffOutcrop:
+    id: str
+    name: str
+    x: float
+    z: float
+    radius: float
+    height: float
+    base_elevation: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "x": round(self.x, 2),
+            "z": round(self.z, 2),
+            "radius": round(self.radius, 2),
+            "height": round(self.height, 2),
+            "base_elevation": round(self.base_elevation, 2),
+        }
+
+
+class TacticalTerrain:
+    """Procedural 3D terrain with Diablo Ridge, urban structures, HV powerlines, and WGS84 datum."""
+
+    def __init__(
+        self,
+        size_m: float = 1000.0,
+        resolution: int = 80,
+        origin_lat: float = DEFAULT_ORIGIN_LAT,
+        origin_lon: float = DEFAULT_ORIGIN_LON,
+        origin_alt_asl: float = DEFAULT_ORIGIN_ALT_ASL,
+    ) -> None:
+        self.size_m = size_m
+        self.half_size = size_m / 2.0
+        self.resolution = resolution
+        self.origin_lat = float(origin_lat)
+        self.origin_lon = float(origin_lon)
+        self.origin_alt_asl = float(origin_alt_asl)
+        set_active_origin(self.origin_lat, self.origin_lon, self.origin_alt_asl)
+
+        # Ground Control Station (GCS-ALPHA) in West Valley
+        gcs_x, gcs_z = -340.0, 40.0
+        gcs_ground = self.get_elevation(gcs_x, gcs_z)
+        self.gcs_position = np.array([gcs_x, gcs_ground + 8.0, gcs_z], dtype=float)
+
+        self.buildings: List[Building] = self._generate_buildings()
+        self.thermal_entities: List[ThermalEntity] = self._generate_thermal_entities()
+        self.pylons: List[TransmissionPylon] = self._generate_pylons()
+        self.power_lines: List[PowerLineSpan] = self._generate_power_lines()
+        self.cliff_outcrops: List[CliffOutcrop] = self._generate_cliff_outcrops()
+
+    def set_origin(
+        self,
+        lat: float,
+        lon: float,
+        alt_asl: Optional[float] = None,
+    ) -> Dict[str, float]:
+        """Update the terrain and module-level active WGS84 geodetic origin."""
+        updated = set_active_origin(lat, lon, alt_asl)
+        self.origin_lat = updated["lat"]
+        self.origin_lon = updated["lon"]
+        self.origin_alt_asl = updated["alt_asl"]
+        return updated
+
+    def local_to_wgs84(self, x: float, z: float) -> Tuple[float, float]:
+        return local_to_wgs84(x, z, self.origin_lat, self.origin_lon)
+
+    def wgs84_to_local(self, lat: float, lon: float) -> Tuple[float, float]:
+        return wgs84_to_local(lat, lon, self.origin_lat, self.origin_lon)
+
+    def local_to_gps(self, x: float, z: float) -> Tuple[float, float]:
+        return self.local_to_wgs84(x, z)
+
+    def gps_to_local(self, lat: float, lon: float) -> Tuple[float, float]:
+        return self.wgs84_to_local(lat, lon)
+
+    def get_elevation(self, x: float, z: float) -> float:
+        """Compute procedural terrain elevation (m above local datum) at (x, z)."""
+        # Diablo Ridge runs roughly N-S centered near x = -40m with peak ~136m
+        ridge_center_x = -40.0 + 18.0 * math.sin(z * 0.006)
+        dx_ridge = x - ridge_center_x
+        main_ridge = 122.0 * math.exp(-((dx_ridge / 78.0) ** 2)) * math.exp(-((z / 420.0) ** 2))
+
+        # Secondary saddle / rocky crest modulation along Diablo Ridge
+        crest_mod = 14.0 * math.exp(-((dx_ridge / 42.0) ** 2)) * (0.55 + 0.45 * math.cos(z * 0.018))
+
+        # Western foothills near GCS
+        west_hills = 16.0 * math.exp(-(((x + 310.0) / 140.0) ** 2 + ((z - 30.0) / 180.0) ** 2))
+
+        # Eastern valley floor (~15-24m) with gentle rolling undulations
+        east_undulation = 4.5 * math.sin(x * 0.015) * math.cos(z * 0.015) + 16.0
+
+        elev = east_undulation + main_ridge + crest_mod + west_hills
+        return max(8.0, float(elev))
+
+    def sample_terrain(self, x: float, z: float) -> float:
+        """Alias for get_elevation used by MissionPlanner."""
+        return self.get_elevation(x, z)
+
+    def _generate_buildings(self) -> List[Building]:
+        specs = [
+            ("BLD-01", "Forward Ops Depot", -270.0, 20.0, 24.0, 18.0, 14.0),
+            ("BLD-02", "Comms Bunker West", -235.0, -35.0, 18.0, 18.0, 12.0),
+            ("BLD-03", "Valley Warehouse A", 85.0, -55.0, 26.0, 20.0, 16.0),
+            ("BLD-04", "Valley Warehouse B", 125.0, -52.0, 22.0, 18.0, 18.0),
+            ("BLD-05", "East Grid Substation", 145.0, -15.0, 28.0, 24.0, 21.0),
+            ("BLD-06", "Cooling Tower North", 185.0, -45.0, 20.0, 20.0, 26.0),
+            ("BLD-07", "Control Annex", 110.0, 22.0, 24.0, 18.0, 15.0),
+            ("BLD-08", "Logistics Hangar", 165.0, 35.0, 32.0, 22.0, 19.0),
+            ("BLD-09", "Sensor Calibration Lab", 210.0, 5.0, 20.0, 18.0, 22.0),
+            ("BLD-10", "East Watchtower", 240.0, -25.0, 14.0, 14.0, 30.0),
+            ("BLD-11", "South Relay Shelter", 95.0, 62.0, 18.0, 16.0, 13.0),
+            ("BLD-12", "Fuel Storage Array", 205.0, 55.0, 24.0, 20.0, 15.0),
+        ]
+        buildings: List[Building] = []
+        for bid, name, x, z, w, d, h in specs:
+            base = self.get_elevation(x, z)
+            buildings.append(Building(bid, name, x, z, w, d, h, base))
+        return buildings
+
+    def _generate_thermal_entities(self) -> List[ThermalEntity]:
+        entities = [
+            ThermalEntity(
+                id="THM-01",
+                label="Armored Convoy Lead (APC)",
+                category="VEHICLE_ARMOR",
+                base_x=115.0,
+                base_z=-20.0,
+                temp_c=68.5,
+                radius_m=5.5,
+                height_m=3.6,
+                patrol_rx=18.0,
+                patrol_rz=10.0,
+                patrol_omega=0.14,
+                phase=0.0,
+            ),
+            ThermalEntity(
+                id="THM-02",
+                label="Tactical Utility Truck",
+                category="VEHICLE_SUPPORT",
+                base_x=168.0,
+                base_z=18.0,
+                temp_c=63.2,
+                radius_m=5.0,
+                height_m=3.4,
+                patrol_rx=16.0,
+                patrol_rz=14.0,
+                patrol_omega=-0.12,
+                phase=1.2,
+            ),
+            ThermalEntity(
+                id="THM-03",
+                label="Mobile Diesel Generator Hut",
+                category="INFRASTRUCTURE_HEAT",
+                base_x=145.0,
+                base_z=-15.0,
+                temp_c=84.5,
+                radius_m=6.0,
+                height_m=4.5,
+                patrol_rx=0.0,
+                patrol_rz=0.0,
+                patrol_omega=0.0,
+                phase=0.0,
+            ),
+            ThermalEntity(
+                id="THM-04",
+                label="Recon Foot Patrol (Personnel)",
+                category="PERSONNEL_SAR",
+                base_x=135.0,
+                base_z=38.0,
+                temp_c=37.2,
+                radius_m=4.2,
+                height_m=2.2,
+                patrol_rx=12.0,
+                patrol_rz=9.0,
+                patrol_omega=0.18,
+                phase=2.4,
+            ),
+        ]
+        for ent in entities:
+            ent.update(0.0, self)
+        return entities
+
+    def _generate_pylons(self) -> List[TransmissionPylon]:
+        coords = [
+            ("PYLON-1", "HV Tower North-West", 75.0, -95.0, 42.0),
+            ("PYLON-2", "HV Tower Center-West", 95.0, 5.0, 44.0),
+            ("PYLON-3", "HV Tower Center-East", 195.0, -5.0, 44.0),
+            ("PYLON-4", "HV Tower South-East", 215.0, 95.0, 42.0),
+        ]
+        pylons: List[TransmissionPylon] = []
+        for pid, name, x, z, h in coords:
+            base = self.get_elevation(x, z)
+            pylons.append(TransmissionPylon(pid, name, x, z, base, h))
+        return pylons
+
+    def _generate_power_lines(self) -> List[PowerLineSpan]:
+        p_map = {p.id: p for p in self.pylons}
+        p1, p2, p3, p4 = p_map["PYLON-1"], p_map["PYLON-2"], p_map["PYLON-3"], p_map["PYLON-4"]
+        return [
+            PowerLineSpan(
+                id="WIRE-SPAN-1",
+                name="115kV Valley Cross-Tie HV Line (15mm ACSR)",
+                pylon_a_id=p1.id,
+                pylon_b_id=p2.id,
+                start_pos=[p1.x, p1.base_elevation + p1.height - 4.0, p1.z],
+                end_pos=[p2.x, p2.base_elevation + p2.height - 4.0, p2.z],
+                sag_m=6.5,
+                wire_diameter_mm=15.0,
+                voltage_kv=115,
+            ),
+            PowerLineSpan(
+                id="WIRE-SPAN-2",
+                name="230kV Substation Feeder HV Line (15mm ACSR)",
+                pylon_a_id=p2.id,
+                pylon_b_id=p3.id,
+                start_pos=[p2.x, p2.base_elevation + p2.height - 3.5, p2.z],
+                end_pos=[p3.x, p3.base_elevation + p3.height - 3.5, p3.z],
+                sag_m=7.0,
+                wire_diameter_mm=15.0,
+                voltage_kv=230,
+            ),
+            PowerLineSpan(
+                id="WIRE-SPAN-3",
+                name="230kV East Corridor HV Line (15mm ACSR)",
+                pylon_a_id=p3.id,
+                pylon_b_id=p4.id,
+                start_pos=[p3.x, p3.base_elevation + p3.height - 4.0, p3.z],
+                end_pos=[p4.x, p4.base_elevation + p4.height - 4.0, p4.z],
+                sag_m=6.5,
+                wire_diameter_mm=15.0,
+                voltage_kv=230,
+            ),
+        ]
+
+    def _generate_cliff_outcrops(self) -> List[CliffOutcrop]:
+        specs = [
+            ("OUTCROP-1", "Diablo North Spire", -35.0, -75.0, 16.0, 26.0),
+            ("OUTCROP-2", "Razorback Crag", -22.0, 15.0, 15.0, 24.0),
+            ("OUTCROP-3", "East Valley Monolith", 62.0, -18.0, 13.0, 28.0),
+        ]
+        outcrops: List[CliffOutcrop] = []
+        for oid, name, x, z, r, h in specs:
+            base = self.get_elevation(x, z)
+            outcrops.append(CliffOutcrop(oid, name, x, z, r, h, base))
+        return outcrops
+
+    def check_los(self, p1: np.ndarray, p2: np.ndarray, num_samples: int = 48) -> Tuple[bool, float, List[float]]:
+        """Check Line-of-Sight between two 3D points across Diablo Ridge and urban structures."""
+        max_obstruction_m = 0.0
+        worst_point = [float((p1[0] + p2[0]) * 0.5), float((p1[1] + p2[1]) * 0.5), float((p1[2] + p2[2]) * 0.5)]
+        for i in range(1, num_samples):
+            t = i / float(num_samples)
+            pt = (1.0 - t) * p1 + t * p2
+            terr_h = self.get_elevation(float(pt[0]), float(pt[2]))
+            diff = terr_h - float(pt[1])
+            if diff > max_obstruction_m:
+                max_obstruction_m = diff
+                worst_point = [round(float(pt[0]), 2), round(float(terr_h), 2), round(float(pt[2]), 2)]
+        has_los = max_obstruction_m <= 0.0
+        return has_los, round(float(max_obstruction_m), 2), worst_point
+
+    def scan_720_obstacles(
+        self,
+        drone_pos: np.ndarray,
+        ambient_lux: float = 650.0,
+    ) -> Dict[str, Any]:
+        """Evaluate 720° Omnidirectional Perception (Binocular Fisheye + 60GHz/24GHz mmWave Radar)."""
+        fisheye_active = ambient_lux >= EVO_MAX_4T_SPECS.fisheye_min_lux
+        mmwave_active = True
+        fisheye_range = EVO_MAX_4T_SPECS.fisheye_range_m if fisheye_active else 0.0
+        mmwave_range = EVO_MAX_4T_SPECS.mmwave_range_m
+
+        contacts: List[Dict[str, Any]] = []
+        repulsive_vec = np.zeros(3, dtype=float)
+        closest_dist = 999.0
+        primary_threat: Optional[Dict[str, Any]] = None
+
+        # 1. Check High-Voltage Power-Line Catenary Spans (15mm wires — mmWave always detects >= 12.7mm)
+        for span in self.power_lines:
+            pts = span.sample_points(20)
+            best_span_dist = 999.0
+            best_pt: Optional[np.ndarray] = None
+            for pt_list in pts:
+                pt = np.array(pt_list, dtype=float)
+                d = float(np.linalg.norm(drone_pos - pt))
+                if d < best_span_dist:
+                    best_span_dist = d
+                    best_pt = pt
+            if best_pt is not None and best_span_dist <= mmwave_range:
+                detected_by = "FISHEYE+RADAR" if (fisheye_active and best_span_dist <= fisheye_range) else "MMWAVE_RADAR_60GHZ"
+                contact = {
+                    "id": span.id,
+                    "label": span.name,
+                    "type": "HV_POWERLINE",
+                    "distance_m": round(best_span_dist, 2),
+                    "wire_diameter_mm": span.wire_diameter_mm,
+                    "position": [round(float(best_pt[0]), 2), round(float(best_pt[1]), 2), round(float(best_pt[2]), 2)],
+                    "detected_by": detected_by,
+                }
+                contacts.append(contact)
+                if best_span_dist < closest_dist:
+                    closest_dist = best_span_dist
+                    primary_threat = contact
+                if best_span_dist < 26.0:
+                    # Climb safely over suspended HV conductors
+                    strength = max(0.0, (26.0 - best_span_dist) / 26.0)
+                    repulsive_vec[1] += 6.5 * strength + 1.8
+
+        # 2. Check Transmission Pylons
+        for pylon in self.pylons:
+            top_y = pylon.base_elevation + pylon.height
+            clamped_y = min(max(float(drone_pos[1]), pylon.base_elevation), top_y)
+            nearest = np.array([pylon.x, clamped_y, pylon.z], dtype=float)
+            d = float(np.linalg.norm(drone_pos - nearest))
+            if d <= mmwave_range:
+                detected_by = "FISHEYE+RADAR" if (fisheye_active and d <= fisheye_range) else "MMWAVE_RADAR_60GHZ"
+                contact = {
+                    "id": pylon.id,
+                    "label": pylon.name,
+                    "type": "PYLON_TOWER",
+                    "distance_m": round(d, 2),
+                    "position": [round(float(nearest[0]), 2), round(float(nearest[1]), 2), round(float(nearest[2]), 2)],
+                    "detected_by": detected_by,
+                }
+                contacts.append(contact)
+                if d < closest_dist:
+                    closest_dist = d
+                    primary_threat = contact
+                if d < 24.0:
+                    diff = drone_pos - nearest
+                    norm = max(float(np.linalg.norm(diff)), 1.0)
+                    repulsive_vec += (diff / norm) * ((24.0 - d) * 0.35)
+                    repulsive_vec[1] += 2.5
+
+        # 3. Check Cliff Outcrops & Buildings
+        for outcrop in self.cliff_outcrops:
+            top_y = outcrop.base_elevation + outcrop.height
+            clamped_y = min(max(float(drone_pos[1]), outcrop.base_elevation), top_y)
+            nearest = np.array([outcrop.x, clamped_y, outcrop.z], dtype=float)
+            d = max(0.5, float(np.linalg.norm(drone_pos - nearest)) - outcrop.radius)
+            if d <= mmwave_range:
+                detected_by = "FISHEYE+RADAR" if (fisheye_active and d <= fisheye_range) else "MMWAVE_RADAR_60GHZ"
+                contact = {
+                    "id": outcrop.id,
+                    "label": outcrop.name,
+                    "type": "CLIFF_OUTCROP",
+                    "distance_m": round(d, 2),
+                    "position": [round(float(nearest[0]), 2), round(float(nearest[1]), 2), round(float(nearest[2]), 2)],
+                    "detected_by": detected_by,
+                }
+                contacts.append(contact)
+                if d < closest_dist:
+                    closest_dist = d
+                    primary_threat = contact
+                if d < 22.0:
+                    diff = drone_pos - nearest
+                    norm = max(float(np.linalg.norm(diff)), 1.0)
+                    repulsive_vec += (diff / norm) * ((22.0 - d) * 0.4)
+                    repulsive_vec[1] += 2.2
+
+        for bld in self.buildings:
+            top_y = bld.base_elevation + bld.height
+            if float(drone_pos[1]) <= top_y + 14.0:
+                clamped_y = min(max(float(drone_pos[1]), bld.base_elevation), top_y)
+                nearest = np.array([bld.x, clamped_y, bld.z], dtype=float)
+                d = max(0.5, float(np.linalg.norm(drone_pos - nearest)) - max(bld.width, bld.depth) * 0.5)
+                if d <= mmwave_range:
+                    detected_by = "FISHEYE+RADAR" if (fisheye_active and d <= fisheye_range) else "MMWAVE_RADAR_60GHZ"
+                    contact = {
+                        "id": bld.id,
+                        "label": bld.name,
+                        "type": "URBAN_STRUCTURE",
+                        "distance_m": round(d, 2),
+                        "position": [round(float(nearest[0]), 2), round(float(nearest[1]), 2), round(float(nearest[2]), 2)],
+                        "detected_by": detected_by,
+                    }
+                    contacts.append(contact)
+                    if d < closest_dist:
+                        closest_dist = d
+                        primary_threat = contact
+                    if d < 18.0:
+                        repulsive_vec[1] += 3.5
+
+        contacts.sort(key=lambda c: c["distance_m"])
+        apas_active = float(np.linalg.norm(repulsive_vec)) > 0.1
+        if apas_active and primary_threat is not None:
+            apas_status = f"CLIMBING ({primary_threat['detected_by']})"
+        elif fisheye_active:
+            apas_status = "NOMINAL (720° FISHEYE+RADAR)"
+        else:
+            apas_status = "LOW-LIGHT RADAR GUARD (60GHz)"
+
+        return {
+            "fisheye_status": "ACTIVE" if fisheye_active else "LOW-LIGHT BLIND",
+            "mmwave_status": "ACTIVE (≥12.7mm WIRE)",
+            "ambient_lux": round(ambient_lux, 1),
+            "closest_obstacle_m": round(closest_dist, 2) if contacts else None,
+            "apas_active": apas_active,
+            "apas_status": apas_status,
+            "avoidance_vector": [
+                round(float(repulsive_vec[0]), 2),
+                round(float(repulsive_vec[1]), 2),
+                round(float(repulsive_vec[2]), 2),
+            ],
+            "primary_threat": primary_threat,
+            "contacts": contacts[:6],
+        }
+
+    def raycast_lrf(
+        self,
+        origin: np.ndarray,
+        pitch_deg: float,
+        yaw_deg: float,
+        max_range_m: float = 1200.0,
+    ) -> Dict[str, Any]:
+        """Raycast 1200m Laser Rangefinder from drone gimbal and return local + WGS84 target coordinates."""
+        pitch_rad = math.radians(pitch_deg)
+        yaw_rad = math.radians(yaw_deg)
+
+        dx = math.cos(pitch_rad) * math.cos(yaw_rad)
+        dy = math.sin(pitch_rad)
+        dz = math.cos(pitch_rad) * math.sin(yaw_rad)
+        ray_dir = np.array([dx, dy, dz], dtype=float)
+        norm = np.linalg.norm(ray_dir)
+        if norm > 1e-6:
+            ray_dir /= norm
+
+        # First check proximity to thermal entities & buildings along ray
+        best_hit_pos: Optional[np.ndarray] = None
+        best_dist: float = max_range_m
+        best_label = "Terrain Surface"
+        best_id = "TERRAIN"
+        best_temp_c = 18.5
+
+        for ent in self.thermal_entities:
+            ent_pos = np.array([ent.x, ent.y + ent.height_m * 0.5, ent.z], dtype=float)
+            to_ent = ent_pos - origin
+            proj = float(np.dot(to_ent, ray_dir))
+            if 5.0 <= proj <= max_range_m:
+                closest_pt = origin + ray_dir * proj
+                perp_dist = float(np.linalg.norm(closest_pt - ent_pos))
+                if perp_dist <= max(ent.radius_m * 2.2, 12.0) and proj < best_dist:
+                    best_dist = proj
+                    best_hit_pos = ent_pos
+                    best_label = ent.label
+                    best_id = ent.id
+                    best_temp_c = ent.temp_c
+
+        if best_hit_pos is None:
+            for bld in self.buildings:
+                bld_pos = np.array([bld.x, bld.base_elevation + bld.height * 0.5, bld.z], dtype=float)
+                to_bld = bld_pos - origin
+                proj = float(np.dot(to_bld, ray_dir))
+                if 5.0 <= proj <= max_range_m:
+                    closest_pt = origin + ray_dir * proj
+                    perp_dist = float(np.linalg.norm(closest_pt - bld_pos))
+                    if perp_dist <= max(bld.width, bld.depth) * 0.75 and proj < best_dist:
+                        best_dist = proj
+                        best_hit_pos = closest_pt
+                        best_label = f"{bld.id} {bld.name}"
+                        best_id = bld.id
+                        best_temp_c = 27.4
+
+        # March ray against terrain heightmap if no entity/structure hit closer
+        if best_hit_pos is None:
+            step_m = 4.0
+            steps = int(max_range_m / step_m)
+            for i in range(1, steps + 1):
+                d = i * step_m
+                pt = origin + ray_dir * d
+                terr_y = self.get_elevation(float(pt[0]), float(pt[2]))
+                if float(pt[1]) <= terr_y:
+                    best_dist = d
+                    best_hit_pos = np.array([float(pt[0]), terr_y, float(pt[2])], dtype=float)
+                    break
+
+        if best_hit_pos is None:
+            best_hit_pos = origin + ray_dir * 250.0
+            best_hit_pos[1] = max(best_hit_pos[1], self.get_elevation(float(best_hit_pos[0]), float(best_hit_pos[2])))
+            best_dist = float(np.linalg.norm(best_hit_pos - origin))
+
+        hit_x, hit_y, hit_z = float(best_hit_pos[0]), float(best_hit_pos[1]), float(best_hit_pos[2])
+        target_lat, target_lon = self.local_to_wgs84(hit_x, hit_z)
+        target_alt_asl = self.origin_alt_asl + hit_y
+
+        return {
+            "valid": True,
+            "slant_range_m": round(best_dist, 1),
+            "target_id": best_id,
+            "target_label": best_label,
+            "target_temp_c": round(best_temp_c, 1),
+            "target_pos": [round(hit_x, 2), round(hit_y, 2), round(hit_z, 2)],
+            "target_lat": round(target_lat, 6),
+            "target_lon": round(target_lon, 6),
+            "target_alt_asl": round(target_alt_asl, 1),
+            "target_alt_local_m": round(hit_y, 1),
+        }
+
+    def export_heightmap(self) -> Dict[str, Any]:
+        """Serialize the 3D terrain mesh, obstacles, thermal entities, and geodetic origin."""
+        xs = np.linspace(-self.half_size, self.half_size, self.resolution)
+        zs = np.linspace(-self.half_size, self.half_size, self.resolution)
+        grid: List[List[float]] = []
+        for z in zs:
+            row = [round(self.get_elevation(float(x), float(z)), 2) for x in xs]
+            grid.append(row)
+
+        gcs_lat, gcs_lon = self.local_to_wgs84(float(self.gcs_position[0]), float(self.gcs_position[2]))
+        return {
+            "size_m": self.size_m,
+            "resolution": self.resolution,
+            "origin_lat": round(self.origin_lat, 7),
+            "origin_lon": round(self.origin_lon, 7),
+            "origin_alt_asl": round(self.origin_alt_asl, 2),
+            "geodetic_origin": {
+                "lat": round(self.origin_lat, 7),
+                "lon": round(self.origin_lon, 7),
+                "alt_asl": round(self.origin_alt_asl, 2),
+            },
+            "gcs_position": [round(float(v), 2) for v in self.gcs_position],
+            "gcs_wgs84": {
+                "lat": round(gcs_lat, 7),
+                "lon": round(gcs_lon, 7),
+                "alt_asl": round(self.origin_alt_asl + float(self.gcs_position[1]), 2),
+            },
+            "heights": grid,
+            "buildings": [b.to_dict() for b in self.buildings],
+            "thermal_entities": [e.to_dict(self) for e in self.thermal_entities],
+            "pylons": [p.to_dict() for p in self.pylons],
+            "power_lines": [s.to_dict() for s in self.power_lines],
+            "cliff_outcrops": [c.to_dict() for c in self.cliff_outcrops],
+        }
