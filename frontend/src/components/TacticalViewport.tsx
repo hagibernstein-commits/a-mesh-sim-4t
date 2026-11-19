@@ -241,19 +241,38 @@ export const TacticalViewport: React.FC<TacticalViewportProps> = ({
         ))}
 
         {/* Giv'ot Eden & Emek HaEla Structures */}
-        {terrain?.buildings.map((b) => (
-          <mesh
-            key={b.id}
-            position={[b.x, b.base_elevation + b.height / 2, b.z]}
-          >
-            <boxGeometry args={[b.width, b.height, b.depth]} />
-            <meshStandardMaterial
-              color="#1e293b"
-              emissive="#0f172a"
-              roughness={0.7}
-            />
-          </mesh>
-        ))}
+        {terrain?.buildings.map((b) => {
+          const isResidential = b.category === 'RESIDENTIAL';
+          const isCommand = b.category === 'COMMAND';
+          const rotRad = ((b.rotation_deg ?? 0) * Math.PI) / 180;
+          return (
+            <mesh
+              key={b.id}
+              position={[b.x, b.base_elevation + b.height / 2, b.z]}
+              rotation={[0, rotRad, 0]}
+            >
+              <boxGeometry args={[b.width, b.height, b.depth]} />
+              <meshStandardMaterial
+                color={
+                  isCommand
+                    ? '#0ea5e9'
+                    : isResidential
+                    ? '#475569'
+                    : '#1e293b'
+                }
+                emissive={
+                  isCommand
+                    ? '#0369a1'
+                    : isResidential
+                    ? '#1e293b'
+                    : '#0f172a'
+                }
+                emissiveIntensity={isCommand ? 0.35 : 0.2}
+                roughness={0.72}
+              />
+            </mesh>
+          );
+        })}
 
         {/* HV Transmission Pylons & 15mm Catenary Power Lines */}
         {terrain?.pylons.map((p) => (

@@ -259,6 +259,8 @@ export interface TerrainHeightmap {
     depth: number;
     height: number;
     base_elevation: number;
+    rotation_deg?: number;
+    category?: string;
   }[];
   thermal_entities: ThermalEntityData[];
   pylons: {

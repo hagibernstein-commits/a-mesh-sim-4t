@@ -97,6 +97,8 @@ class Building:
     depth: float
     height: float
     base_elevation: float
+    rotation_deg: float = 0.0
+    category: str = "RESIDENTIAL"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -108,6 +110,8 @@ class Building:
             "depth": round(self.depth, 2),
             "height": round(self.height, 2),
             "base_elevation": round(self.base_elevation, 2),
+            "rotation_deg": round(self.rotation_deg, 1),
+            "category": self.category,
         }
 
 
@@ -271,14 +275,22 @@ class TacticalTerrain:
         gcs_ground = self.get_elevation(gcs_x, gcs_z)
         self.gcs_position = np.array([gcs_x, gcs_ground + 8.0, gcs_z], dtype=float)
 
-        # Outer security perimeter fence line circling Giv'ot Eden residential hilltop
+        # Outer security perimeter fence line circling Giv'ot Eden (NW hilltop, main neighborhood, and eastern wing)
         self.perimeter_fence_xz: List[List[float]] = [
-            [-295.0, -95.0],
-            [-85.0, -95.0],
-            [-62.0, -35.0],
-            [-62.0, 45.0],
-            [-85.0, 95.0],
-            [-295.0, 95.0],
+            [-332.0, -298.0],
+            [-235.0, -312.0],
+            [-212.0, -245.0],
+            [-218.0, -95.0],
+            [-145.0, -18.0],
+            [-55.0, 42.0],
+            [28.0, 74.0],
+            [26.0, 102.0],
+            [-85.0, 138.0],
+            [-172.0, 206.0],
+            [-268.0, 206.0],
+            [-304.0, 128.0],
+            [-298.0, -35.0],
+            [-335.0, -225.0],
         ]
 
         # Valley road corridor centerline (Route 375 / Emek HaEla)
@@ -332,13 +344,14 @@ class TacticalTerrain:
         # Secondary karst limestone crest modulation along the escarpment
         crest_mod = 14.0 * math.exp(-((dx_ridge / 40.0) ** 2)) * (0.55 + 0.45 * math.cos(z * 0.018))
 
-        # Giv'ot Eden residential hilltop plateau (x in [-320, -40], ~340m–375m ASL equivalent relief)
-        givot_eden_dome = 22.0 * math.exp(-(((x + 195.0) / 145.0) ** 2 + ((z - 10.0) / 175.0) ** 2))
+        # Giv'ot Eden residential hilltop plateau (main bowl + northern hilltop spur)
+        givot_eden_dome = 22.0 * math.exp(-(((x + 195.0) / 145.0) ** 2 + ((z - 45.0) / 195.0) ** 2))
+        north_spur_dome = 18.0 * math.exp(-(((x + 285.0) / 85.0) ** 2 + ((z + 250.0) / 95.0) ** 2))
 
         # Lower Emek HaEla / Route 375 valley floor (east of ridge, x > 45m) with gentle rolling terraces
         valley_terrace = 4.0 * math.sin(x * 0.014) * math.cos(z * 0.014) + 14.5
 
-        elev = valley_terrace + main_ridge + crest_mod + givot_eden_dome
+        elev = valley_terrace + main_ridge + crest_mod + givot_eden_dome + north_spur_dome
         return max(8.0, float(elev))
 
     def get_elevation_asl(self, x: float, z: float) -> float:
@@ -353,24 +366,116 @@ class TacticalTerrain:
         return self.get_elevation(x, z)
 
     def _generate_buildings(self) -> List[Building]:
-        specs = [
-            ("BLD-01", "GCS-GIVOT-EDEN Hilltop Command Center", -215.0, 12.0, 24.0, 18.0, 14.0),
-            ("BLD-02", "Giv'ot Eden North Perimeter Gatehouse", -185.0, -72.0, 18.0, 18.0, 12.0),
-            ("BLD-03", "Route 375 Agricultural Warehouse A", 85.0, -55.0, 26.0, 20.0, 16.0),
-            ("BLD-04", "Route 375 Agricultural Warehouse B", 125.0, -52.0, 22.0, 18.0, 18.0),
-            ("BLD-05", "Emek HaEla Regional Grid Substation", 145.0, -15.0, 28.0, 24.0, 21.0),
-            ("BLD-06", "Netiv HaLamed-Heh Water Pumping Station", 185.0, -45.0, 20.0, 20.0, 26.0),
-            ("BLD-07", "Emek HaEla Valley Comms Annex", 110.0, 22.0, 24.0, 18.0, 15.0),
-            ("BLD-08", "Elah Valley Field Logistics Hangar", 165.0, 35.0, 32.0, 22.0, 19.0),
-            ("BLD-09", "HaEla SatCom Calibration Facility", 210.0, 5.0, 20.0, 18.0, 22.0),
-            ("BLD-10", "Route 375 East Observation Watchtower", 240.0, -25.0, 14.0, 14.0, 30.0),
-            ("BLD-11", "Tel Sokho South Relay Shelter", 95.0, 62.0, 18.0, 16.0, 13.0),
-            ("BLD-12", "Emek HaEla Emergency Fuel Depot", 205.0, 55.0, 24.0, 20.0, 15.0),
+        # Specs: (id, name, x, z, width, depth, height, rotation_deg, category)
+        specs: List[Tuple[str, str, float, float, float, float, float, float, str]] = [
+            # --- 1. Central Command & Community Complex ---
+            ("BLD-01", "GCS-GIVOT-EDEN Hilltop Command Center", -215.0, 12.0, 24.0, 18.0, 12.0, 28.0, "COMMAND"),
+            # --- 2. Northern Hilltop Cluster (image_2.png) ---
+            ("GE-NH-01", "North Hilltop Villa 01", -306.0, -264.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-02", "North Hilltop Villa 02", -292.0, -271.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-03", "North Hilltop Villa 03", -278.0, -278.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-04", "North Hilltop Villa 04", -264.0, -285.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-05", "North Hilltop Villa 05", -300.0, -246.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-06", "North Hilltop Villa 06", -286.0, -253.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-07", "North Hilltop Villa 07", -272.0, -260.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-08", "North Hilltop Villa 08", -288.0, -228.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-09", "North Hilltop Villa 09", -274.0, -235.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-10", "North Hilltop Villa 10", -260.0, -242.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-11", "North Hilltop Villa 11", -276.0, -211.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-12", "North Hilltop Villa 12", -262.0, -218.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-13", "North Hilltop Villa 13", -250.0, -226.0, 11.5, 10.0, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NH-14", "North Hilltop Perimeter Compound", -242.0, -296.0, 14.0, 14.0, 9.5, 28.0, "COMMAND"),
+            # --- 3. NW Residential Quarter (image_3.png) ---
+            ("GE-NW-01", "NW Arc Villa 01", -282.0, 5.0, 12.0, 10.5, 8.5, 15.0, "RESIDENTIAL"),
+            ("GE-NW-02", "NW Arc Villa 02", -284.0, 24.0, 12.0, 10.5, 8.5, 5.0, "RESIDENTIAL"),
+            ("GE-NW-03", "NW Arc Villa 03", -280.0, 43.0, 12.0, 10.5, 8.5, -12.0, "RESIDENTIAL"),
+            ("GE-NW-04", "NW Row A Villa 01", -264.0, -12.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-05", "NW Row A Villa 02", -248.0, -20.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-06", "NW Row A Villa 03", -232.0, -28.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-07", "NW Row A Villa 04", -216.0, -36.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-08", "NW Row B Villa 01", -252.0, 8.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-09", "NW Row B Villa 02", -236.0, 0.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-10", "NW Row B Villa 03", -220.0, -8.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-11", "NW Row B Villa 04", -204.0, -16.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-12", "NW Flank Villa 01", -192.0, -38.0, 12.0, 10.5, 8.5, -30.0, "RESIDENTIAL"),
+            ("GE-NW-13", "NW Flank Villa 02", -182.0, -22.0, 12.0, 10.5, 8.5, -30.0, "RESIDENTIAL"),
+            ("GE-NW-14", "NW Flank Villa 03", -172.0, -6.0, 12.0, 10.5, 8.5, -30.0, "RESIDENTIAL"),
+            ("GE-NW-15", "NW Central Villa 01", -240.0, 28.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-16", "NW Central Villa 02", -224.0, 36.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-17", "NW Central Villa 03", -208.0, 44.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-18", "NW Central Villa 04", -192.0, 52.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-19", "NW Central Villa 05", -226.0, 48.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-20", "NW Central Villa 06", -210.0, 56.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-21", "NW Central Villa 07", -194.0, 64.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-22", "NW Central Villa 08", -178.0, 72.0, 12.0, 10.5, 8.5, 28.0, "RESIDENTIAL"),
+            ("GE-NW-23", "NW South Arc Villa 01", -262.0, 62.0, 12.0, 10.5, 8.5, 20.0, "RESIDENTIAL"),
+            ("GE-NW-24", "NW South Arc Villa 02", -246.0, 68.0, 12.0, 10.5, 8.5, 20.0, "RESIDENTIAL"),
+            ("GE-NW-25", "NW South Arc Villa 03", -230.0, 74.0, 12.0, 10.5, 8.5, 20.0, "RESIDENTIAL"),
+            ("GE-NW-26", "NW South Arc Villa 04", -214.0, 80.0, 12.0, 10.5, 8.5, 20.0, "RESIDENTIAL"),
+            # --- 4. South-Central Residential Bowl (image_4.png left/center) ---
+            ("GE-SC-01", "South-West Curve Villa 01", -270.0, 148.0, 12.0, 10.5, 8.5, 12.0, "RESIDENTIAL"),
+            ("GE-SC-02", "South-West Curve Villa 02", -262.0, 166.0, 12.0, 10.5, 8.5, 25.0, "RESIDENTIAL"),
+            ("GE-SC-03", "South-West Curve Villa 03", -250.0, 180.0, 12.0, 10.5, 8.5, 38.0, "RESIDENTIAL"),
+            ("GE-SC-04", "South-West Curve Villa 04", -234.0, 189.0, 12.0, 10.5, 8.5, 15.0, "RESIDENTIAL"),
+            ("GE-SC-05", "South-West Curve Villa 05", -216.0, 193.0, 12.0, 10.5, 8.5, 5.0, "RESIDENTIAL"),
+            ("GE-SC-06", "South Bowl Row 1 Villa 01", -256.0, 102.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-07", "South Bowl Row 1 Villa 02", -238.0, 109.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-08", "South Bowl Row 1 Villa 03", -220.0, 116.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-09", "South Bowl Row 1 Villa 04", -202.0, 123.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-10", "South Bowl Row 1 Villa 05", -184.0, 130.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-11", "South Bowl Row 2 Villa 01", -250.0, 122.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-12", "South Bowl Row 2 Villa 02", -232.0, 129.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-13", "South Bowl Row 2 Villa 03", -214.0, 136.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-14", "South Bowl Row 2 Villa 04", -196.0, 143.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-15", "South Bowl Row 2 Villa 05", -178.0, 150.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-16", "South Bowl Row 3 Villa 01", -244.0, 142.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-17", "South Bowl Row 3 Villa 02", -226.0, 149.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-18", "South Bowl Row 3 Villa 03", -208.0, 156.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-19", "South Bowl Row 3 Villa 04", -190.0, 163.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-20", "South Bowl Row 3 Villa 05", -172.0, 170.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-21", "South Bowl Row 4 Villa 01", -234.0, 164.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-22", "South Bowl Row 4 Villa 02", -216.0, 171.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-23", "South Bowl Row 4 Villa 03", -198.0, 178.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-24", "South Bowl Row 4 Villa 04", -180.0, 185.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-25", "South Bowl East Flank 01", -162.0, 118.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-26", "South Bowl East Flank 02", -156.0, 138.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-27", "South Bowl East Flank 03", -150.0, 158.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            ("GE-SC-28", "South Bowl East Flank 04", -158.0, 176.0, 12.0, 10.5, 8.5, 22.0, "RESIDENTIAL"),
+            # --- 5. Central-East Block (image_4.png middle) ---
+            ("GE-CE-01", "Central-East Villa 01", -134.0, 58.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-02", "Central-East Villa 02", -118.0, 63.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-03", "Central-East Villa 03", -102.0, 68.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-04", "Central-East Villa 04", -86.0, 73.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-05", "Central-East Villa 05", -140.0, 78.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-06", "Central-East Villa 06", -124.0, 83.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-07", "Central-East Villa 07", -108.0, 88.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-08", "Central-East Villa 08", -92.0, 93.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-09", "Central-East Villa 09", -146.0, 98.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-10", "Central-East Villa 10", -130.0, 103.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-11", "Central-East Villa 11", -114.0, 108.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-CE-12", "Central-East Villa 12", -98.0, 113.0, 12.0, 10.5, 8.5, -18.0, "RESIDENTIAL"),
+            # --- 6. Eastern Extension Wing (image_4.png right) ---
+            ("GE-EW-01", "East Wing Villa 01", -64.0, 68.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-02", "East Wing Villa 02", -48.0, 72.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-03", "East Wing Villa 03", -32.0, 76.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-04", "East Wing Villa 04", -16.0, 80.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-05", "East Wing Villa 05", -60.0, 86.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-06", "East Wing Villa 06", -44.0, 90.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-07", "East Wing Villa 07", -28.0, 94.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-08", "East Wing Villa 08", -14.0, 97.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-09", "East Wing Villa 09", -54.0, 102.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-10", "East Wing Villa 10", -38.0, 106.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            ("GE-EW-11", "East Wing Villa 11", -22.0, 109.0, 11.5, 10.0, 8.5, -18.0, "RESIDENTIAL"),
+            # --- 7. Emek HaEla / Route 375 Valley Infrastructure ---
+            ("BLD-V1", "Route 375 Agricultural Warehouse", 105.0, -55.0, 24.0, 18.0, 14.0, 0.0, "INFRASTRUCTURE"),
+            ("BLD-V2", "Emek HaEla Regional Grid Substation", 145.0, -15.0, 28.0, 24.0, 19.0, 0.0, "INFRASTRUCTURE"),
+            ("BLD-V3", "Elah Valley Field Logistics Hangar", 165.0, 35.0, 30.0, 20.0, 17.0, 0.0, "INFRASTRUCTURE"),
+            ("BLD-V4", "Route 375 East Observation Watchtower", 235.0, -25.0, 14.0, 14.0, 28.0, 0.0, "INFRASTRUCTURE"),
         ]
         buildings: List[Building] = []
-        for bid, name, x, z, w, d, h in specs:
+        for bid, name, x, z, w, d, h, rot, cat in specs:
             base = self.get_elevation(x, z)
-            buildings.append(Building(bid, name, x, z, w, d, h, base))
+            buildings.append(Building(bid, name, x, z, w, d, h, base, rot, cat))
         return buildings
 
     def _generate_thermal_entities(self) -> List[ThermalEntity]:

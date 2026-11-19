@@ -90,7 +90,7 @@ def test_websocket_and_controls():
     assert res.status_code == 200
     data = res.json()
     assert "geodetic_origin" in data
-    assert len(data["buildings"]) == 12
+    assert len(data["buildings"]) >= 90
 
     health_res = client.get("/api/health")
     assert health_res.status_code == 200
